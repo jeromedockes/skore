@@ -105,7 +105,7 @@ class _BaseAccessor(AccessorHelpMixin, Generic[ParentT]):
                     "data either when creating the report or by setting data_source "
                     "to 'X_y' and providing X and y."
                 )
-            return self._parent._X_test, self._parent._y_test, None
+            return self._parent.test_data, self._parent._y_test, None
         elif data_source == "train":
             if not (X is None or y is None):
                 raise ValueError("X and y must be None when data_source is train.")
@@ -117,7 +117,7 @@ class _BaseAccessor(AccessorHelpMixin, Generic[ParentT]):
                     "data either when creating the report or by setting data_source "
                     "to 'X_y' and providing X and y."
                 )
-            return self._parent._X_train, self._parent._y_train, None
+            return self._parent.train_data, self._parent._y_train, None
         elif data_source == "X_y":
             if X is None or y is None:
                 missing_data = "X and y"

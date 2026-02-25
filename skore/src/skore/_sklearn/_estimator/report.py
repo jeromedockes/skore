@@ -7,6 +7,7 @@ from itertools import product
 from typing import TYPE_CHECKING, Any, Literal
 
 import numpy as np
+import skrub
 from joblib import Parallel
 from numpy.typing import ArrayLike
 from sklearn.base import BaseEstimator, clone
@@ -31,6 +32,21 @@ if TYPE_CHECKING:
         _InspectionAccessor,
     )
     from skore._sklearn._estimator.metrics_accessor import _MetricsAccessor
+
+
+def _freeze_X_y(data_op, env):
+    """
+    Return an env in which X and y have been collected
+
+    The result is similar to .skb.train_test_split outputs.
+    It ensures we can retrieve the ground truth to compute metrics, and that X
+    and y are materialized so that results will be consistent even if there is
+    randomness in the production of X and y (e.g. they are unsorted database
+    query results).
+    """
+    return data_op.skb.train_test_split(
+        env, split_func=lambda X, y: (X, None, y, None)
+    )["train"]
 
 
 class EstimatorReport(_BaseReport, DirNamesMixin):
@@ -116,17 +132,20 @@ class EstimatorReport(_BaseReport, DirNamesMixin):
     @staticmethod
     def _fit_estimator(
         estimator: BaseEstimator,
-        X_train: ArrayLike | None,
-        y_train: ArrayLike | None,
+        data,
     ) -> tuple[BaseEstimator, float]:
-        if X_train is None or y_train is None:
-            raise ValueError(
-                "The training data is required to fit the estimator. "
-                "Please provide both X_train and y_train."
-            )
+        # TODO: remember if estimator was provided as a sklearn estimator or
+        # skrub learner, check content of data for presence of X and y only if
+        # sklearn case
+        #
+        # if data.get("X") is None or data.get("y") is None:
+        #     raise ValueError(
+        #         "The training data is required to fit the estimator. "
+        #         "Please provide both X_train and y_train."
+        #     )
         estimator_ = clone(estimator)
         with MeasureTime() as fit_time:
-            estimator_.fit(X_train, y_train)
+            estimator_.fit(data)
         return estimator_, fit_time()
 
     @classmethod
@@ -146,13 +165,15 @@ class EstimatorReport(_BaseReport, DirNamesMixin):
 
     def __init__(
         self,
-        estimator: BaseEstimator,
+        estimator: BaseEstimator | skrub.SkrubLearner,
         *,
         fit: Literal["auto"] | bool = "auto",
         X_train: ArrayLike | None = None,
         y_train: ArrayLike | None = None,
         X_test: ArrayLike | None = None,
         y_test: ArrayLike | None = None,
+        train_data: dict | None = None,
+        test_data: dict | None = None,
         pos_label: PositiveLabel | None = None,
     ) -> None:
         self._fit = fit
@@ -163,6 +184,18 @@ class EstimatorReport(_BaseReport, DirNamesMixin):
                 " classification or regression model instead."
             )
 
+        if isinstance(estimator, skrub.DataOp):
+            estimator = estimator.skb.make_learner()
+        if not hasattr(estimator, "__skrub_to_Xy_pipeline__"):
+            # convert scikit-learn to skrub learner
+            estimator = skrub.X().skb.apply(estimator, y=skrub.y()).skb.make_learner()
+
+        if test_data is None:
+            train_data = {"X": X_train, "y": y_train}
+            test_data = {"X": X_test, "y": y_test}
+        self.train_data = _freeze_X_y(estimator.data_op, train_data)
+        self.test_data = _freeze_X_y(estimator.data_op, test_data)
+
         fit_time: float | None = None
         if fit == "auto":
             try:
@@ -170,24 +203,29 @@ class EstimatorReport(_BaseReport, DirNamesMixin):
                 self._estimator = self._copy_estimator(estimator)
             except NotFittedError:
                 self._estimator, fit_time = self._fit_estimator(
-                    estimator, X_train, y_train
+                    estimator, self.train_data
                 )
         elif fit is True:
-            self._estimator, fit_time = self._fit_estimator(estimator, X_train, y_train)
+            self._estimator, fit_time = self._fit_estimator(estimator, self.train_data)
         else:  # fit is False
             self._estimator = self._copy_estimator(estimator)
 
         # private storage to be able to invalidate the cache when the user alters
         # those attributes
-        self._X_train = X_train
-        self._y_train = y_train
-        self._X_test = X_test
-        self._y_test = y_test
+        self._X_train = self.train_data.get("_skrub_X")
+        self._y_train = self.train_data.get("_skrub_y")
+        self._X_test = self.test_data.get("_skrub_X")
+        self._y_test = self.test_data.get("_skrub_y")
         self._pos_label = pos_label
         self.fit_time_ = fit_time
         self._parent_hash: np.int64 | None = None
 
         self._initialize_state()
+
+    def _check_environment(self, environment):
+        if environment in ["train", "test"]:
+            return getattr(self, f"{environment}_data")
+        return _freeze_X_y(self._estimator.data_op, environment)
 
     def _initialize_state(self) -> None:
         """Initialize/reset the random number generator, hash, and cache."""
@@ -271,9 +309,9 @@ class EstimatorReport(_BaseReport, DirNamesMixin):
                 response_methods = ["predict"]
             pos_labels = [None]
 
-        data_sources = [("test", self._X_test)]
+        data_sources = [("test", self.test_data)]
         if self._X_train is not None:
-            data_sources += [("train", self._X_train)]
+            data_sources += [("train", self.train_data)]
 
         parallel = Parallel(
             **_validate_joblib_parallel_params(n_jobs=n_jobs, return_as="generator")
@@ -379,14 +417,16 @@ class EstimatorReport(_BaseReport, DirNamesMixin):
             pos_label = self.pos_label
 
         if data_source == "test":
-            X_ = self._X_test
+            X_ = self.test_data
         elif data_source == "train":
-            X_ = self._X_train
+            X_ = self.train_data
         elif data_source == "X_y":
             if X is None:
                 raise ValueError(
                     "The `X` parameter is required when `data_source` is 'X_y'."
                 )
+            if not isinstance(X, dict):
+                X = {"X": X}
             X_ = X
         else:
             raise ValueError(f"Invalid data source: {data_source}")
