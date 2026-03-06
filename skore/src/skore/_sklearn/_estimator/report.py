@@ -193,8 +193,8 @@ class EstimatorReport(_BaseReport, DirNamesMixin):
         if test_data is None:
             train_data = {"X": X_train, "y": y_train}
             test_data = {"X": X_test, "y": y_test}
-        self.train_data = _freeze_X_y(estimator.data_op, train_data)
-        self.test_data = _freeze_X_y(estimator.data_op, test_data)
+        self._train_data = _freeze_X_y(estimator.data_op, train_data)
+        self._test_data = _freeze_X_y(estimator.data_op, test_data)
 
         fit_time: float | None = None
         if fit == "auto":
@@ -203,19 +203,19 @@ class EstimatorReport(_BaseReport, DirNamesMixin):
                 self._estimator = self._copy_estimator(estimator)
             except NotFittedError:
                 self._estimator, fit_time = self._fit_estimator(
-                    estimator, self.train_data
+                    estimator, self._train_data
                 )
         elif fit is True:
-            self._estimator, fit_time = self._fit_estimator(estimator, self.train_data)
+            self._estimator, fit_time = self._fit_estimator(estimator, self._train_data)
         else:  # fit is False
             self._estimator = self._copy_estimator(estimator)
 
         # private storage to be able to invalidate the cache when the user alters
         # those attributes
-        self._X_train = self.train_data.get("_skrub_X")
-        self._y_train = self.train_data.get("_skrub_y")
-        self._X_test = self.test_data.get("_skrub_X")
-        self._y_test = self.test_data.get("_skrub_y")
+        self._X_train = self._train_data.get("_skrub_X")
+        self._y_train = self._train_data.get("_skrub_y")
+        self._X_test = self._test_data.get("_skrub_X")
+        self._y_test = self._test_data.get("_skrub_y")
         self._pos_label = pos_label
         self.fit_time_ = fit_time
         self._parent_hash: np.int64 | None = None
@@ -309,9 +309,9 @@ class EstimatorReport(_BaseReport, DirNamesMixin):
                 response_methods = ["predict"]
             pos_labels = [None]
 
-        data_sources = [("test", self.test_data)]
+        data_sources = [("test", self._test_data)]
         if self._X_train is not None:
-            data_sources += [("train", self.train_data)]
+            data_sources += [("train", self._train_data)]
 
         parallel = Parallel(
             **_validate_joblib_parallel_params(n_jobs=n_jobs, return_as="generator")
@@ -411,9 +411,9 @@ class EstimatorReport(_BaseReport, DirNamesMixin):
             pos_label = self.pos_label
 
         if data_source == "test":
-            X_ = self.test_data
+            X_ = self._test_data
         elif data_source == "train":
-            X_ = self.train_data
+            X_ = self._train_data
         else:
             raise ValueError(f"Invalid data source: {data_source}")
 
