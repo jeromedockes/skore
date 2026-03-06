@@ -460,6 +460,14 @@ class EstimatorReport(_BaseReport, DirNamesMixin):
         return self._y_test
 
     @property
+    def train_data(self) -> dict:
+        return self._train_data.copy()
+
+    @property
+    def test_data(self) -> dict:
+        return self._test_data.copy()
+
+    @property
     def pos_label(self) -> PositiveLabel | None:
         return self._pos_label
 
