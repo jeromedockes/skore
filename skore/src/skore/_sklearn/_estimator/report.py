@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import time
 import warnings
+import webbrowser
 from itertools import product
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -129,8 +130,8 @@ class EstimatorReport(_BaseReport, DirNamesMixin):
     inspection: _InspectionAccessor
     data: _DataAccessor
 
-    @staticmethod
     def _fit_estimator(
+        self,
         estimator: BaseEstimator,
         data,
     ) -> tuple[BaseEstimator, float]:
@@ -145,7 +146,9 @@ class EstimatorReport(_BaseReport, DirNamesMixin):
         #     )
         estimator_ = clone(estimator)
         with MeasureTime() as fit_time:
-            estimator_.fit(data)
+            self._fit_report = estimator_.report(
+                environment=data, mode="fit", open=False
+            )["report_path"]
         return estimator_, fit_time()
 
     @classmethod
@@ -503,3 +506,6 @@ class EstimatorReport(_BaseReport, DirNamesMixin):
     def __repr__(self) -> str:
         """Return a string representation."""
         return f"{self.__class__.__name__}(estimator={self.estimator_}, ...)"
+
+    def open_fit_report(self):
+        webbrowser.open(f"file://{self._fit_report}")
