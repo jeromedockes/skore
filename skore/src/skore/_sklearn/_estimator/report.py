@@ -50,6 +50,30 @@ def _freeze_X_y(data_op, env):
     )["train"]
 
 
+class _ReportingLearner(BaseEstimator):
+    def __init__(self, learner):
+        self.learner = learner
+
+    def __sklearn_tags__(self, *args, **kwargs):
+        return self.learner.__sklearn_tags__(*args, **kwargs)
+
+    def __getattr__(self, name):
+        if name not in ("predict", "predict_proba", "decision_function", "score"):
+            return getattr(self.learner, name)
+
+        def f(environment):
+            result = self.learner.report(environment=environment, mode=name, title=name)
+            if not hasattr(self, "reports"):
+                self.reports_ = {}
+            self.reports_[name] = result["report_path"]
+            if (error := result.get("error")) is not None:
+                raise error
+            return result["result"]
+
+        f.__name__ = name
+        return f
+
+
 class EstimatorReport(_BaseReport, DirNamesMixin):
     """Report for a fitted estimator.
 
@@ -147,7 +171,7 @@ class EstimatorReport(_BaseReport, DirNamesMixin):
         estimator_ = clone(estimator)
         with MeasureTime() as fit_time:
             self._fit_report = estimator_.report(
-                environment=data, mode="fit", open=False
+                environment=data, mode="fit", open=False, title="fit"
             )["report_path"]
         return estimator_, fit_time()
 
@@ -213,6 +237,7 @@ class EstimatorReport(_BaseReport, DirNamesMixin):
         else:  # fit is False
             self._estimator = self._copy_estimator(estimator)
 
+        self._estimator = _ReportingLearner(self._estimator)
         # private storage to be able to invalidate the cache when the user alters
         # those attributes
         self._X_train = self._train_data.get("_skrub_X")
@@ -440,7 +465,7 @@ class EstimatorReport(_BaseReport, DirNamesMixin):
 
     @property
     def estimator(self) -> BaseEstimator:
-        return self._estimator
+        return self._estimator.learner
 
     @property
     def estimator_(self) -> BaseEstimator:
@@ -509,3 +534,6 @@ class EstimatorReport(_BaseReport, DirNamesMixin):
 
     def open_fit_report(self):
         webbrowser.open(f"file://{self._fit_report}")
+
+    def open_predict_proba_report(self):
+        webbrowser.open(f"file://{self._estimator.reports_['predict_proba']}")
