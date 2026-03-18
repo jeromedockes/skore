@@ -374,7 +374,7 @@ class _MetricsAccessor(
         data_source: DataSource = "test",
         **metric_kwargs: Any,
     ) -> float | dict[PositiveLabel, float] | list:
-        X, y_true = self._get_X_y(data_source=data_source)
+        data, y_true = self._get_data_and_y_true(data_source=data_source)
 
         pos_label = self._parent.pos_label
 
@@ -395,7 +395,7 @@ class _MetricsAccessor(
                 cache=self._parent._cache,
                 estimator_hash=int(self._parent._hash),
                 estimator=self._parent.estimator_,
-                X=X,
+                X=data,
                 response_method=response_method,
                 pos_label=pos_label,
                 data_source=data_source,
@@ -1214,14 +1214,14 @@ class _MetricsAccessor(
         y_pred: list[YPlotData] = []
 
         for ds in data_sources:
-            ds_X, ds_y = self._get_X_y(data_source=ds)
+            ds_data, ds_y = self._get_data_and_y_true(data_source=ds)
 
             y_true_data, y_pred_data = _get_ys_for_single_report(
                 cache=self._parent._cache,
                 estimator_hash=int(self._parent._hash),
                 estimator=self._parent.estimator_,
                 estimator_name=self._parent.estimator_name_,
-                X=ds_X,
+                X=ds_data,
                 y_true=ds_y,
                 data_source=ds,
                 response_method=response_method,

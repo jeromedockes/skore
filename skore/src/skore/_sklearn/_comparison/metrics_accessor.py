@@ -985,14 +985,16 @@ class _MetricsAccessor(_BaseMetricsAccessor, _BaseAccessor, DirNamesMixin):
                 total=len(self._parent.reports_),
             ):
                 for ds in data_sources:
-                    report_X, report_y = report.metrics._get_X_y(data_source=ds)
+                    report_data, report_y = report.metrics._get_data_and_y_true(
+                        data_source=ds
+                    )
 
                     y_true_data, y_pred_data = _get_ys_for_single_report(
                         cache=report._cache,
                         estimator_hash=int(report._hash),
                         estimator=report._estimator,
                         estimator_name=report_name,
-                        X=report_X,
+                        X=report_data,
                         y_true=report_y,
                         data_source=ds,
                         response_method=response_method,
@@ -1022,8 +1024,10 @@ class _MetricsAccessor(_BaseMetricsAccessor, _BaseAccessor, DirNamesMixin):
             ):
                 for split, estimator_report in enumerate(report.estimator_reports_):
                     for ds in data_sources:
-                        report_X, report_y = estimator_report.metrics._get_X_y(
-                            data_source=ds
+                        report_data, report_y = (
+                            estimator_report.metrics._get_data_and_y_true(
+                                data_source=ds
+                            )
                         )
 
                         y_true_data, y_pred_data = _get_ys_for_single_report(
@@ -1031,7 +1035,7 @@ class _MetricsAccessor(_BaseMetricsAccessor, _BaseAccessor, DirNamesMixin):
                             estimator_hash=int(estimator_report._hash),
                             estimator=estimator_report.estimator_,
                             estimator_name=report_name,
-                            X=report_X,
+                            X=report_data,
                             y_true=report_y,
                             data_source=ds,
                             response_method=response_method,

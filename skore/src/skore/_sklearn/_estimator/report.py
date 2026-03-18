@@ -25,6 +25,7 @@ from skore._utils._fixes import _validate_joblib_parallel_params
 from skore._utils._measure_time import MeasureTime
 from skore._utils._parallel import delayed
 from skore._utils._progress_bar import track
+from skore._utils._skrub import eval_X_y, is_skrub_learner
 
 if TYPE_CHECKING:
     from skore._sklearn._estimator.data_accessor import _DataAccessor
@@ -32,21 +33,6 @@ if TYPE_CHECKING:
         _InspectionAccessor,
     )
     from skore._sklearn._estimator.metrics_accessor import _MetricsAccessor
-
-
-def _freeze_X_y(data_op, env):
-    """
-    Return an env in which X and y have been collected.
-
-    The result is similar to .skb.train_test_split outputs.
-    It ensures we can retrieve the ground truth to compute metrics, and that X
-    and y are materialized so that results will be consistent even if there is
-    randomness in the production of X and y (e.g. they are unsorted database
-    query results).
-    """
-    return data_op.skb.train_test_split(
-        env, split_func=lambda X, y: (X, None, y, None)
-    )["train"]
 
 
 class EstimatorReport(_BaseReport, DirNamesMixin):
@@ -134,15 +120,11 @@ class EstimatorReport(_BaseReport, DirNamesMixin):
         estimator: BaseEstimator,
         data,
     ) -> tuple[BaseEstimator, float]:
-        # TODO: remember if estimator was provided as a sklearn estimator or
-        # skrub learner, check content of data for presence of X and y only if
-        # sklearn case
-        #
-        # if data.get("X") is None or data.get("y") is None:
-        #     raise ValueError(
-        #         "The training data is required to fit the estimator. "
-        #         "Please provide both X_train and y_train."
-        #     )
+        if data is None:
+            raise ValueError(
+                "The training data is required to fit the estimator. "
+                "Please provide training data or a fitted estimator."
+            )
         estimator_ = clone(estimator)
         with MeasureTime() as fit_time:
             estimator_.fit(data)
@@ -178,54 +160,62 @@ class EstimatorReport(_BaseReport, DirNamesMixin):
     ) -> None:
         self._fit = fit
 
+        if isinstance(estimator, skrub.DataOp):
+            estimator = estimator.skb.make_learner()
         if is_clusterer(estimator):
             raise ValueError(
                 "Clustering models are not supported yet. Please use a"
                 " classification or regression model instead."
             )
-
-        if isinstance(estimator, skrub.DataOp):
-            estimator = estimator.skb.make_learner()
-        if not hasattr(estimator, "__skrub_to_Xy_pipeline__"):
-            # convert scikit-learn to skrub learner
+        if is_skrub_learner(estimator):
+            if any(v is not None for v in (X_train, y_train, X_test, y_test)):
+                raise TypeError(
+                    "X_train, y_train, X_test, y_test cannot be provided when "
+                    "estimator is a SkrubLearner. "
+                    "Provide train_data and test_data instead."
+                )
+            if test_data is None:
+                raise TypeError(
+                    "test_data must be provided when estimator is a SkrubLearner"
+                )
+            self._test_data = eval_X_y(estimator.data_op, test_data)
+            self._train_data = (
+                None if train_data is None else eval_X_y(estimator.data_op, train_data)
+            )
+        else:
+            if train_data is not None or test_data is not None:
+                raise TypeError(
+                    "train_data and test_data can only be provided when estimator "
+                    "is a SkrubLearner. "
+                    "Provide X_train, y_train, X_test, y_test instead."
+                )
             estimator = skrub.X().skb.apply(estimator, y=skrub.y()).skb.make_learner()
+            self._test_data = eval_X_y(estimator.data_op, {"X": X_test, "y": y_test})
+            self._train_data = (
+                None
+                if X_train is None
+                else eval_X_y(estimator.data_op, {"X": X_train, "y": y_train})
+            )
 
-        if test_data is None:
-            train_data = {"X": X_train, "y": y_train}
-            test_data = {"X": X_test, "y": y_test}
-        self._train_data = _freeze_X_y(estimator.data_op, train_data)
-        self._test_data = _freeze_X_y(estimator.data_op, test_data)
-
-        fit_time: float | None = None
+        self._fit_time: float | None = None
         if fit == "auto":
             try:
                 check_is_fitted(estimator)
                 self._estimator = self._copy_estimator(estimator)
             except NotFittedError:
-                self._estimator, fit_time = self._fit_estimator(
+                self._estimator, self._fit_time = self._fit_estimator(
                     estimator, self._train_data
                 )
         elif fit is True:
-            self._estimator, fit_time = self._fit_estimator(estimator, self._train_data)
+            self._estimator, self._fit_time = self._fit_estimator(
+                estimator, self._train_data
+            )
         else:  # fit is False
             self._estimator = self._copy_estimator(estimator)
 
-        # private storage to be able to invalidate the cache when the user alters
-        # those attributes
-        self._X_train = self._train_data.get("_skrub_X")
-        self._y_train = self._train_data.get("_skrub_y")
-        self._X_test = self._test_data.get("_skrub_X")
-        self._y_test = self._test_data.get("_skrub_y")
         self._pos_label = pos_label
-        self.fit_time_ = fit_time
         self._parent_hash: np.int64 | None = None
-
         self._initialize_state()
-
-    def _check_environment(self, environment):
-        if environment in ["train", "test"]:
-            return getattr(self, f"{environment}_data")
-        return _freeze_X_y(self._estimator.data_op, environment)
 
     def _initialize_state(self) -> None:
         """Initialize/reset the random number generator, hash, and cache."""
@@ -234,11 +224,7 @@ class EstimatorReport(_BaseReport, DirNamesMixin):
             low=np.iinfo(np.int64).min, high=np.iinfo(np.int64).max
         )
         self._cache = Cache()
-        self._ml_task = _find_ml_task(self._y_test, estimator=self._estimator)
-
-    # NOTE:
-    # For the moment, we do not allow to alter the estimator and the training data.
-    # For the validation set, we allow it and we invalidate the cache.
+        self._ml_task = _find_ml_task(self.y_test, estimator=self._estimator)
 
     def clear_cache(self) -> None:
         """Clear the cache.
@@ -308,7 +294,7 @@ class EstimatorReport(_BaseReport, DirNamesMixin):
                 response_methods = ["predict"]
 
         data_sources = [("test", self._test_data)]
-        if self._X_train is not None:
+        if self._train_data is not None:
             data_sources += [("train", self._train_data)]
 
         parallel = Parallel(
@@ -394,9 +380,14 @@ class EstimatorReport(_BaseReport, DirNamesMixin):
         (25,)
         """
         if data_source == "test":
-            X_ = self._test_data
+            data = self._test_data
         elif data_source == "train":
-            X_ = self._train_data
+            if self._train_data is None:
+                raise ValueError(
+                    "data_source='train' cannot be used "
+                    "when no training data was provided."
+                )
+            data = self._train_data
         else:
             raise ValueError(f"Invalid data source: {data_source}")
 
@@ -404,7 +395,7 @@ class EstimatorReport(_BaseReport, DirNamesMixin):
             cache=self._cache,
             estimator_hash=int(self._hash),
             estimator=self._estimator,
-            X=X_,
+            X=data,
             response_method=response_method,
             pos_label=self._pos_label,
             data_source=data_source,
@@ -420,7 +411,7 @@ class EstimatorReport(_BaseReport, DirNamesMixin):
 
     @property
     def estimator(self) -> BaseEstimator:
-        return self._estimator.learner
+        return self._estimator
 
     @property
     def estimator_(self) -> BaseEstimator:
@@ -428,23 +419,23 @@ class EstimatorReport(_BaseReport, DirNamesMixin):
 
     @property
     def X_train(self) -> ArrayLike | None:
-        return self._X_train
+        return (self._train_data or {}).get("_skrub_X")
 
     @property
     def y_train(self) -> ArrayLike | None:
-        return self._y_train
+        return (self._train_data or {}).get("_skrub_y")
 
     @property
     def X_test(self) -> ArrayLike | None:
-        return self._X_test
+        return self._test_data["_skrub_X"]
 
     @property
     def y_test(self) -> ArrayLike | None:
-        return self._y_test
+        return self._test_data["_skrub_y"]
 
     @property
-    def train_data(self) -> dict:
-        return self._train_data.copy()
+    def train_data(self) -> dict | None:
+        return None if self._train_data is None else self._train_data.copy()
 
     @property
     def test_data(self) -> dict:

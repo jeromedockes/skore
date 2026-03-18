@@ -922,14 +922,16 @@ class _MetricsAccessor(
             total=len(self._parent.estimator_reports_),
         ):
             # Retrieve data stored in the individual reports
-            report_X, report_y = report.metrics._get_X_y(data_source=data_source)
+            report_data, report_y = report.metrics._get_data_and_y_true(
+                data_source=data_source
+            )
 
             y_true_data, y_pred_data = _get_ys_for_single_report(
                 cache=report._cache,
                 estimator_hash=int(report._hash),
                 estimator=report._estimator,
                 estimator_name=self._parent.estimator_name_,
-                X=report_X,
+                X=report_data,
                 y_true=cast(ArrayLike, report_y),
                 data_source=data_source,
                 response_method=response_method,
