@@ -13,6 +13,7 @@ from sklearn.model_selection import check_cv
 from sklearn.pipeline import Pipeline
 
 from skore._externals._pandas_accessors import DirNamesMixin
+from skore._externals._sklearn_compat import _safe_indexing
 from skore._sklearn._base import _BaseReport
 from skore._sklearn._estimator.report import EstimatorReport
 from skore._sklearn.find_ml_task import _find_ml_task
@@ -30,6 +31,32 @@ if TYPE_CHECKING:
         _InspectionAccessor,
     )
     from skore._sklearn._cross_validation.metrics_accessor import _MetricsAccessor
+
+
+def _generate_estimator_report(
+    estimator: BaseEstimator,
+    X: ArrayLike,
+    y: ArrayLike | None,
+    pos_label: PositiveLabel | None,
+    train_indices: ArrayLike,
+    test_indices: ArrayLike,
+) -> EstimatorReport:
+    if y is None:
+        # In the case of clustering, we do not have y
+        y_train = None
+        y_test = None
+    else:
+        y_train = _safe_indexing(y, train_indices)
+        y_test = _safe_indexing(y, test_indices)
+    return EstimatorReport(
+        estimator,
+        fit=True,
+        X_train=_safe_indexing(X, train_indices),
+        y_train=y_train,
+        X_test=_safe_indexing(X, test_indices),
+        y_test=y_test,
+        pos_label=pos_label,
+    )
 
 
 class CrossValidationReport(_BaseReport, DirNamesMixin):
@@ -131,11 +158,13 @@ class CrossValidationReport(_BaseReport, DirNamesMixin):
         splitter: int | SKLearnCrossValidator | Generator | None = None,
         n_jobs: int | None = None,
     ) -> None:
+        self._raw_estimator = estimator
         if isinstance(estimator, skrub.DataOp):
             estimator = estimator.skb.make_learner()
         self._estimator = clone(estimator)
 
         if is_skrub_learner(estimator):
+            self._initialized_with_data_op = True
             if X is not None or y is not None:
                 raise TypeError(
                     "X and y cannot be provided when estimator is a SkrubLearner. "
@@ -147,6 +176,7 @@ class CrossValidationReport(_BaseReport, DirNamesMixin):
                 )
             self._data: dict = eval_X_y(estimator.data_op, data)
         else:
+            self._initialized_with_data_op = False
             if data is not None:
                 raise TypeError(
                     "`data` can only be provided when estimator "
@@ -187,24 +217,45 @@ class CrossValidationReport(_BaseReport, DirNamesMixin):
             )
         )
 
-        # do not split the data to take advantage of the memory mapping
-        return list(
-            track(
-                parallel(
-                    delayed(EstimatorReport)(
-                        clone(self._estimator),
-                        train_data=split["train"],
-                        test_data=split["test"],
-                        pos_label=self._pos_label,
-                    )
-                    for split in self._estimator.data_op.skb.iter_cv_splits(
-                        self.split_indices
-                    )
-                ),
-                description=f"Processing cross-validation\nfor {self.estimator_name_}",
-                total=len(self.split_indices),
+        if self._initialized_with_data_op:
+            return list(
+                track(
+                    parallel(
+                        delayed(EstimatorReport)(
+                            clone(self._estimator),
+                            train_data=split["train"],
+                            test_data=split["test"],
+                            pos_label=self._pos_label,
+                        )
+                        for split in self._estimator.data_op.skb.iter_cv_splits(
+                            self.split_indices
+                        )
+                    ),
+                    description="Processing cross-validation\n"
+                    f"for {self.estimator_name_}",
+                    total=len(self.split_indices),
+                )
             )
-        )
+        else:
+            # do not split the data to take advantage of the memory mapping
+            return list(
+                track(
+                    parallel(
+                        delayed(_generate_estimator_report)(
+                            clone(self._raw_estimator),
+                            self.X,
+                            self.y,
+                            self.pos_label,
+                            train_indices,
+                            test_indices,
+                        )
+                        for (train_indices, test_indices) in self.split_indices
+                    ),
+                    description="Processing cross-validation\n"
+                    f"for {self.estimator_name_}",
+                    total=len(self.split_indices),
+                )
+            )
 
     def clear_cache(self) -> None:
         """Clear the cache.
@@ -379,14 +430,22 @@ class CrossValidationReport(_BaseReport, DirNamesMixin):
         report : :class:`~skore.EstimatorReport`
             The estimator report.
         """
-        if test_data is None:
-            test_data = {"X": X_test, "y": y_test}
-        report = EstimatorReport(
-            self._estimator,
-            train_data=self._data,
-            test_data=test_data,
-            pos_label=self._pos_label,
-        )
+        if self._initialized_with_data_op:
+            report = EstimatorReport(
+                self._estimator,
+                train_data=self._data,
+                test_data=test_data,
+                pos_label=self._pos_label,
+            )
+        else:
+            report = EstimatorReport(
+                self._raw_estimator,
+                X_train=self.X,
+                y_train=self.y,
+                X_test=X_test,
+                y_test=y_test,
+                pos_label=self._pos_label,
+            )
         report._parent_hash = self._hash
         return report
 
@@ -396,7 +455,7 @@ class CrossValidationReport(_BaseReport, DirNamesMixin):
 
     @property
     def estimator(self) -> BaseEstimator:
-        return self._estimator
+        return self._raw_estimator
 
     @property
     def estimator_(self) -> BaseEstimator:

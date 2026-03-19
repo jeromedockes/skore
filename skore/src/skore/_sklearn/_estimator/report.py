@@ -158,6 +158,7 @@ class EstimatorReport(_BaseReport, DirNamesMixin):
         test_data: dict | None = None,
         pos_label: PositiveLabel | None = None,
     ) -> None:
+        self._raw_estimator = estimator
         self._fit = fit
 
         if isinstance(estimator, skrub.DataOp):
@@ -168,6 +169,7 @@ class EstimatorReport(_BaseReport, DirNamesMixin):
                 " classification or regression model instead."
             )
         if is_skrub_learner(estimator):
+            self._initialized_with_data_op = True
             if any(v is not None for v in (X_train, y_train, X_test, y_test)):
                 raise TypeError(
                     "X_train, y_train, X_test, y_test cannot be provided when "
@@ -183,6 +185,7 @@ class EstimatorReport(_BaseReport, DirNamesMixin):
                 None if train_data is None else eval_X_y(estimator.data_op, train_data)
             )
         else:
+            self._initialized_with_data_op = False
             if train_data is not None or test_data is not None:
                 raise TypeError(
                     "train_data and test_data can only be provided when estimator "
@@ -411,7 +414,7 @@ class EstimatorReport(_BaseReport, DirNamesMixin):
 
     @property
     def estimator(self) -> BaseEstimator:
-        return self._estimator
+        return self._raw_estimator
 
     @property
     def estimator_(self) -> BaseEstimator:
