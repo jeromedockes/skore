@@ -163,6 +163,10 @@ class EstimatorReport(_BaseReport, DirNamesMixin):
         self._fit = fit
 
         if isinstance(estimator, skrub.DataOp):
+            if test_data is None and train_data is None:
+                split = estimator.skb.train_test_split()
+                test_data = split["test"]
+                train_data = split["train"]
             estimator = estimator.skb.make_learner()
         if is_clusterer(estimator):
             raise ValueError(
