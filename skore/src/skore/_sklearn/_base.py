@@ -80,18 +80,18 @@ class _BaseAccessor(AccessorHelpMixin, Generic[ParentT]):
         y : array-like of shape (n_samples,)
             The target labels.
         """
-        if data_source == "test":
-            return self._parent.test_data, self._parent.y_test
-        elif data_source == "train":
-            if self._parent.train_data is None:
-                raise ValueError(
-                    "No training data were provided when creating the report"
-                )
-            return self._parent.train_data, self._parent.y_train
-        else:
+        if data_source not in ["train", "test"]:
             raise ValueError(
                 f"Invalid data source: {data_source}. Possible values are: test, train."
             )
+        if getattr(self._parent, f"{data_source}_data") is None:
+            raise ValueError(
+                f"No {data_source} data were provided when creating the report."
+            )
+        if data_source == "test":
+            return self._parent.test_data, self._parent.y_test
+        assert data_source == "train"
+        return self._parent.train_data, self._parent.y_train
 
 
 def _get_cached_response_values(

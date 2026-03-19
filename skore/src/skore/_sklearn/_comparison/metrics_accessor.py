@@ -992,7 +992,7 @@ class _MetricsAccessor(_BaseMetricsAccessor, _BaseAccessor, DirNamesMixin):
                     y_true_data, y_pred_data = _get_ys_for_single_report(
                         cache=report._cache,
                         estimator_hash=int(report._hash),
-                        estimator=report._estimator,
+                        estimator=report.learner_,
                         estimator_name=report_name,
                         X=report_data,
                         y_true=report_y,
@@ -1033,7 +1033,7 @@ class _MetricsAccessor(_BaseMetricsAccessor, _BaseAccessor, DirNamesMixin):
                         y_true_data, y_pred_data = _get_ys_for_single_report(
                             cache=estimator_report._cache,
                             estimator_hash=int(estimator_report._hash),
-                            estimator=estimator_report.estimator_,
+                            estimator=estimator_report.learner_,
                             estimator_name=report_name,
                             X=report_data,
                             y_true=report_y,
@@ -1050,7 +1050,7 @@ class _MetricsAccessor(_BaseMetricsAccessor, _BaseAccessor, DirNamesMixin):
                 y_pred=y_pred,
                 report_type=self._parent._report_type,
                 estimators=[
-                    estimator_report.estimator_
+                    estimator_report.learner_
                     for report in self._parent.reports_.values()
                     for estimator_report in report.estimator_reports_
                 ],

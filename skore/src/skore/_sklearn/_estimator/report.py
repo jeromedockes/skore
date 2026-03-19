@@ -176,11 +176,9 @@ class EstimatorReport(_BaseReport, DirNamesMixin):
                     "estimator is a SkrubLearner. "
                     "Provide train_data and test_data instead."
                 )
-            if test_data is None:
-                raise TypeError(
-                    "test_data must be provided when estimator is a SkrubLearner"
-                )
-            self._test_data = eval_X_y(estimator.data_op, test_data)
+            self._test_data = (
+                None if test_data is None else eval_X_y(estimator.data_op, test_data)
+            )
             self._train_data = (
                 None if train_data is None else eval_X_y(estimator.data_op, train_data)
             )
@@ -193,7 +191,11 @@ class EstimatorReport(_BaseReport, DirNamesMixin):
                     "Provide X_train, y_train, X_test, y_test instead."
                 )
             estimator = to_learner(estimator)
-            self._test_data = eval_X_y(estimator.data_op, {"X": X_test, "y": y_test})
+            self._test_data = (
+                None
+                if X_test is None
+                else eval_X_y(estimator.data_op, {"X": X_test, "y": y_test})
+            )
             self._train_data = (
                 None
                 if X_train is None
@@ -217,6 +219,7 @@ class EstimatorReport(_BaseReport, DirNamesMixin):
             self._estimator = self._copy_estimator(estimator)
 
         self._pos_label = pos_label
+        self.fit_time_ = self._fit_time
         self._parent_hash: np.int64 | None = None
         self._initialize_state()
 
@@ -420,7 +423,14 @@ class EstimatorReport(_BaseReport, DirNamesMixin):
     def estimator_(self) -> BaseEstimator:
         if self._initialized_with_data_op:
             return self._estimator
-        return to_estimator(self._estimator)
+        try:
+            return to_estimator(self._estimator)
+        except NotFittedError:
+            return self._raw_estimator
+
+    @property
+    def learner_(self) -> BaseEstimator:
+        return self._estimator
 
     @property
     def X_train(self) -> ArrayLike | None:
@@ -432,19 +442,19 @@ class EstimatorReport(_BaseReport, DirNamesMixin):
 
     @property
     def X_test(self) -> ArrayLike | None:
-        return self._test_data["_skrub_X"]
+        return (self._test_data or {}).get("_skrub_X")
 
     @property
     def y_test(self) -> ArrayLike | None:
-        return self._test_data["_skrub_y"]
+        return (self._test_data or {}).get("_skrub_y")
 
     @property
     def train_data(self) -> dict | None:
         return None if self._train_data is None else self._train_data.copy()
 
     @property
-    def test_data(self) -> dict:
-        return self._test_data.copy()
+    def test_data(self) -> dict | None:
+        return None if self._test_data is None else self._test_data.copy()
 
     @property
     def pos_label(self) -> PositiveLabel | None:
