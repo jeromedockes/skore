@@ -3,7 +3,7 @@ from typing import Any
 import skrub
 
 
-def eval_X_y(data_op: skrub.DatOp, env: dict) -> dict:
+def eval_X_y(data_op: skrub.DataOp, env: dict) -> dict:
     """
     Return a dict in which X and y have been materialized.
 

@@ -151,7 +151,7 @@ class CrossValidationReport(_BaseReport, DirNamesMixin):
     def __init__(
         self,
         estimator: BaseEstimator,
-        X: ArrayLike,
+        X: ArrayLike | None = None,
         y: ArrayLike | None = None,
         data: dict | None = None,
         pos_label: PositiveLabel | None = None,
@@ -228,7 +228,7 @@ class CrossValidationReport(_BaseReport, DirNamesMixin):
                             pos_label=self._pos_label,
                         )
                         for split in self._estimator.data_op.skb.iter_cv_splits(
-                            self.split_indices
+                            environment=self._data, cv=self.split_indices
                         )
                     ),
                     description="Processing cross-validation\n"
@@ -478,7 +478,8 @@ class CrossValidationReport(_BaseReport, DirNamesMixin):
         return self._data["_skrub_y"]
 
     @property
-    def data(self) -> dict:
+    def input_data(self) -> dict:
+        # TODO name
         return self._data.copy()
 
     @property

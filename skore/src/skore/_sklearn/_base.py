@@ -87,7 +87,7 @@ class _BaseAccessor(AccessorHelpMixin, Generic[ParentT]):
                 raise ValueError(
                     "No training data were provided when creating the report"
                 )
-            return self._parent.train_data, self._parent._y_train
+            return self._parent.train_data, self._parent.y_train
         else:
             raise ValueError(
                 f"Invalid data source: {data_source}. Possible values are: test, train."
