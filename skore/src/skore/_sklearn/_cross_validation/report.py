@@ -9,6 +9,7 @@ import skrub
 from joblib import Parallel
 from numpy.typing import ArrayLike
 from sklearn.base import BaseEstimator, clone, is_classifier
+from sklearn.exceptions import NotFittedError
 from sklearn.model_selection import check_cv
 from sklearn.pipeline import Pipeline
 
@@ -183,6 +184,7 @@ class CrossValidationReport(_BaseReport, DirNamesMixin):
                     "is a SkrubLearner. Provide X and y instead."
                 )
             estimator = to_learner(estimator)
+            self._estimator = estimator
             self._data = eval_X_y(estimator.data_op, {"X": X, "y": y})
         self._pos_label = pos_label
         self._splitter = check_cv(splitter, y, classifier=is_classifier(estimator))
@@ -461,7 +463,10 @@ class CrossValidationReport(_BaseReport, DirNamesMixin):
     def estimator_(self) -> BaseEstimator:
         if self._initialized_with_data_op:
             return self._estimator
-        return to_estimator(self._estimator)
+        try:
+            return to_estimator(self._estimator)
+        except NotFittedError:
+            return self._raw_estimator
 
     @property
     def learner_(self) -> BaseEstimator:
@@ -469,10 +474,10 @@ class CrossValidationReport(_BaseReport, DirNamesMixin):
 
     @property
     def estimator_name_(self) -> str:
-        if isinstance(self._estimator, Pipeline):
-            name = self._estimator[-1].__class__.__name__
+        if isinstance(self._raw_estimator, Pipeline):
+            name = self._raw_estimator[-1].__class__.__name__
         else:
-            name = self._estimator.__class__.__name__
+            name = self._raw_estimator.__class__.__name__
         return name
 
     @property

@@ -158,6 +158,7 @@ class EstimatorReport(_BaseReport, DirNamesMixin):
         test_data: dict | None = None,
         pos_label: PositiveLabel | None = None,
     ) -> None:
+        estimator = self._copy_estimator(estimator)
         self._raw_estimator = estimator
         self._fit = fit
 
@@ -206,7 +207,7 @@ class EstimatorReport(_BaseReport, DirNamesMixin):
         if fit == "auto":
             try:
                 check_is_fitted(estimator)
-                self._estimator = self._copy_estimator(estimator)
+                self._estimator = estimator
             except NotFittedError:
                 self._estimator, self._fit_time = self._fit_estimator(
                     estimator, self._train_data
@@ -216,7 +217,7 @@ class EstimatorReport(_BaseReport, DirNamesMixin):
                 estimator, self._train_data
             )
         else:  # fit is False
-            self._estimator = self._copy_estimator(estimator)
+            self._estimator = estimator
 
         self._pos_label = pos_label
         self.fit_time_ = self._fit_time

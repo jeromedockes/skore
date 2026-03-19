@@ -56,4 +56,7 @@ def to_learner(estimator: BaseEstimator):
 
 
 def to_estimator(learner: skrub.SkrubLearner):
-    return learner.find_fitted_estimator("estimator")
+    estimator = learner.find_fitted_estimator("estimator")
+    if isinstance(estimator, _FrozenEstimator):
+        estimator = estimator.estimator
+    return estimator
