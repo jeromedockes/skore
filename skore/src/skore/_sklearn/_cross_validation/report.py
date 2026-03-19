@@ -22,7 +22,7 @@ from skore._utils._cache import Cache
 from skore._utils._fixes import _validate_joblib_parallel_params
 from skore._utils._parallel import delayed
 from skore._utils._progress_bar import track
-from skore._utils._skrub import eval_X_y, is_skrub_learner
+from skore._utils._skrub import eval_X_y, is_skrub_learner, to_estimator, to_learner
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -182,7 +182,7 @@ class CrossValidationReport(_BaseReport, DirNamesMixin):
                     "`data` can only be provided when estimator "
                     "is a SkrubLearner. Provide X and y instead."
                 )
-            estimator = skrub.X().skb.apply(estimator, y=skrub.y()).skb.make_learner()
+            estimator = to_learner(estimator)
             self._data = eval_X_y(estimator.data_op, {"X": X, "y": y})
         self._pos_label = pos_label
         self._splitter = check_cv(splitter, y, classifier=is_classifier(estimator))
@@ -459,7 +459,9 @@ class CrossValidationReport(_BaseReport, DirNamesMixin):
 
     @property
     def estimator_(self) -> BaseEstimator:
-        return self._estimator
+        if self._initialized_with_data_op:
+            return self._estimator
+        return to_estimator(self._estimator)
 
     @property
     def estimator_name_(self) -> str:

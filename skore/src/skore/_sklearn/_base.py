@@ -61,7 +61,7 @@ class _BaseAccessor(AccessorHelpMixin, Generic[ParentT]):
         self,
         *,
         data_source: Literal["test", "train"],
-    ) -> tuple[ArrayLike, ArrayLike]:
+    ) -> tuple[dict, ArrayLike]:
         """Get the requested dataset.
 
         Parameters

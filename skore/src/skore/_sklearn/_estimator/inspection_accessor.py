@@ -327,7 +327,7 @@ class _InspectionAccessor(_BaseAccessor[EstimatorReport], DirNamesMixin):
                 data_source=data_source,
                 estimator=self._parent.estimator_,
                 name=self._parent.estimator_name_,
-                X=data_,
+                X=data_["_skrub_X"],
                 y=y_true,
                 at_step=at_step,
                 metric=metric,

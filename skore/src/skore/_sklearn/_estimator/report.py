@@ -25,7 +25,7 @@ from skore._utils._fixes import _validate_joblib_parallel_params
 from skore._utils._measure_time import MeasureTime
 from skore._utils._parallel import delayed
 from skore._utils._progress_bar import track
-from skore._utils._skrub import eval_X_y, is_skrub_learner
+from skore._utils._skrub import eval_X_y, is_skrub_learner, to_estimator, to_learner
 
 if TYPE_CHECKING:
     from skore._sklearn._estimator.data_accessor import _DataAccessor
@@ -192,7 +192,7 @@ class EstimatorReport(_BaseReport, DirNamesMixin):
                     "is a SkrubLearner. "
                     "Provide X_train, y_train, X_test, y_test instead."
                 )
-            estimator = skrub.X().skb.apply(estimator, y=skrub.y()).skb.make_learner()
+            estimator = to_learner(estimator)
             self._test_data = eval_X_y(estimator.data_op, {"X": X_test, "y": y_test})
             self._train_data = (
                 None
@@ -418,7 +418,9 @@ class EstimatorReport(_BaseReport, DirNamesMixin):
 
     @property
     def estimator_(self) -> BaseEstimator:
-        return self._estimator
+        if self._initialized_with_data_op:
+            return self._estimator
+        return to_estimator(self._estimator)
 
     @property
     def X_train(self) -> ArrayLike | None:

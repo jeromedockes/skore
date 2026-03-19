@@ -102,7 +102,7 @@ def _get_ys_for_single_report(
     estimator_hash: int,
     estimator: Any,
     estimator_name: str,
-    X: ArrayLike | None,
+    X: dict | None,
     y_true: ArrayLike,
     data_source: DataSource,
     response_method: str | list[str] | tuple[str, ...],
