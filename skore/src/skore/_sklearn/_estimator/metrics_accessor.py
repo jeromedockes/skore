@@ -1219,7 +1219,7 @@ class _MetricsAccessor(
             y_true_data, y_pred_data = _get_ys_for_single_report(
                 cache=self._parent._cache,
                 estimator_hash=int(self._parent._hash),
-                estimator=self._parent.estimator_,
+                estimator=self._parent._estimator,
                 estimator_name=self._parent.estimator_name_,
                 X=ds_data,
                 y_true=ds_y,

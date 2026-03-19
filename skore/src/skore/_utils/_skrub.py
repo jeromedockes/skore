@@ -15,7 +15,7 @@ def eval_X_y(data_op: skrub.DataOp, env: dict) -> dict:
     query results).
     """
     return data_op.skb.train_test_split(
-        env, split_func=lambda X, y: (X, None, y, None)
+        env, split_func=lambda X, y=None: (X, None, y, None)
     )["train"]
 
 

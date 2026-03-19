@@ -455,7 +455,7 @@ class CrossValidationReport(_BaseReport, DirNamesMixin):
 
     @property
     def estimator(self) -> BaseEstimator:
-        return self._raw_estimator
+        return self.estimator_
 
     @property
     def estimator_(self) -> BaseEstimator:
