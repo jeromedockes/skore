@@ -2,8 +2,24 @@
 Using skore with a skrub DataOp
 ===============================
 
-TODO
+In this example we consider a dataset that is simple, but still requires some
+data wrangling (encoding, aggregation and joining) which could not be performed
+in a regular scikit-learn estimator.
+
+To track those operations, we use a skrub DataOp instead, which can perform
+richer transformations than normal estimators, and also have built-in support
+from skore.
+
+The dataset contains a list of online transactions (each corresponds to a cart,
+or "basket"), each linked to one or more products for which we have a
+description. The task is to predict which involved credit fraud.
 """
+
+# %%
+# We start by defining our data-processing pipeline. Note that it contains
+# operations, such as aggregating and joining the product information after
+# vectorizing the text it contains, that would not be possible in a normal
+# estimator.
 
 # %%
 import skore
@@ -40,7 +56,7 @@ pred = basket_ids.skb.apply_func(join_product_info, vectorized_products).skb.app
     HistGradientBoostingClassifier(), y=fraud_flags
 )
 
-# This would generate a report with previous of intermediate results & fitted
+# This would generate a report with previews of intermediate results & fitted
 # estimators:
 #
 # pred.skb.full_report()
@@ -48,8 +64,24 @@ pred = basket_ids.skb.apply_func(join_product_info, vectorized_products).skb.app
 pred
 
 # %%
+# Above we see a preview on the whole dataset. Click the "show graph" toggle to
+# see a drawing of the pipeline we have built.
+#
+# Just like a normal estimator, a skrub DataOp can be used with skore reports.
+# We can either pass separately a SkrubLearner and training and testing data,
+# or pass our DataOp with the data it already contains and rely on the default
+# train/test split:
+
+# %%
 report = skore.EstimatorReport(pred, pos_label=1)
 report.metrics.roc_auc()
 
 # %%
 report.metrics.precision_recall().plot()
+
+# %%
+# Note that the preprocessing operations are captured in the skrub DataOp,
+# hence in our report -- so we can replay them later on unseen data.
+
+# %%
+report.estimator_.data_op
