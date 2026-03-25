@@ -1,3 +1,4 @@
+import functools
 from typing import Any
 
 import skrub
@@ -35,14 +36,21 @@ class _LearnerAdapter(BaseEstimator):
         if name not in ['fit', 'predict', 'decision_function', 'predict_proba', 'score']:
             return getattr(self.estimator, name)
         func = getattr(self.estimator, name)
+        @functools.wraps(func)
         def f(data):
             kwargs = {'X': data.get('_skrub_X', data['X'])}
-            try:
+            if name in ['fit', 'score']:
                 kwargs['y'] = data.get('_skrub_y', data['y'])
-            except KeyError:
-                pass
             return func(**kwargs)
         return f
+    def __sklearn_is_fitted__(self):
+        try:
+            check_is_fitted(self.estimator)
+            return True
+        except NotFittedError:
+            return False
+    def __sklearn_tags__(self):
+        return self.estimator.__sklearn_tags__()
 
 
 def to_learner(estimator: BaseEstimator):

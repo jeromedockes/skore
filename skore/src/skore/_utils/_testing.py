@@ -101,16 +101,12 @@ class MockReport(_BaseReport):
         self._raw_estimator = estimator
         self._estimator = to_learner(estimator)
         if X_train is not None:
-            self._train_data = eval_X_y(
-                self._estimator.data_op, {"X": X_train, "y": y_train}
-            )
+            self._train_data = {"X": X_train, '_skrub_X': X_train, "y": y_train, '_skrub_y': y_train}
         else:
             self._train_data = None
 
         if X_test is not None:
-            self._test_data = eval_X_y(
-                self._estimator.data_op, {"X": X_test, "y": y_test}
-            )
+            self._test_data = {"X": X_test, '_skrub_X': X_test, "y": y_test, '_skrub_y': y_test}
         else:
             self._test_data = None
         self.no_private = "no_private"
