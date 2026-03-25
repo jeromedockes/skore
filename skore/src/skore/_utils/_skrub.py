@@ -1,7 +1,7 @@
 from typing import Any
 
 import skrub
-from sklearn.base import BaseEstimator
+from sklearn.base import BaseEstimator, clone
 from sklearn.utils.validation import NotFittedError, check_is_fitted
 
 from .._externals._sklearn_compat import FrozenEstimator
@@ -36,6 +36,8 @@ class _FrozenEstimator(FrozenEstimator):
         return self
 
 
+_LEARNER = skrub.X().skb.apply(None, y=skrub.y()).skb.set_name("estimator").skb.make_learner()
+
 def to_learner(estimator: BaseEstimator):
     try:
         check_is_fitted(estimator)
@@ -45,12 +47,8 @@ def to_learner(estimator: BaseEstimator):
         is_fitted = True
     if is_fitted:
         estimator = _FrozenEstimator(estimator)
-    learner = (
-        skrub.X()
-        .skb.apply(estimator, y=skrub.y())
-        .skb.set_name("estimator")
-        .skb.make_learner()
-    )
+    learner = clone(_LEARNER)
+    learner.data_op._skrub_impl.estimator = estimator
     if is_fitted:
         learner.fit({"X": None, "y": None})
     return learner
