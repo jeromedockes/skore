@@ -36,7 +36,8 @@ class _FrozenEstimator(FrozenEstimator):
         return self
 
 
-_LEARNER = skrub.X().skb.apply(None, y=skrub.y()).skb.set_name("estimator").skb.make_learner()
+import pickle
+_LEARNER = pickle.dumps(skrub.X().skb.apply(None, y=skrub.y()).skb.set_name("estimator").skb.make_learner())
 
 def to_learner(estimator: BaseEstimator):
     try:
@@ -47,7 +48,7 @@ def to_learner(estimator: BaseEstimator):
         is_fitted = True
     if is_fitted:
         estimator = _FrozenEstimator(estimator)
-    learner = clone(_LEARNER)
+    learner = pickle.loads(_LEARNER)
     learner.data_op._skrub_impl.estimator = estimator
     if is_fitted:
         learner.fit({"X": None, "y": None})
