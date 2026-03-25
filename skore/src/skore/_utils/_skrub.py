@@ -28,35 +28,27 @@ def is_skrub_learner(obj: Any) -> bool:
     return hasattr(obj, "__skrub_to_Xy_pipeline__")
 
 
-class _FrozenEstimator(FrozenEstimator):
-    def get_params(self, deep=True):
-        return {}
+class _LearnerAdapter(BaseEstimator):
+    def __init__(self, estimator):
+        self.estimator = estimator
+    def __getattr__(self, name):
+        if name not in ['fit', 'predict', 'decision_function', 'predict_proba', 'score']:
+            return getattr(self.estimator, name)
+        func = getattr(self.estimator, name)
+        def f(data):
+            kwargs = {'X': data.get('_skrub_X', data['X'])}
+            try:
+                kwargs['y'] = data.get('_skrub_y', data['y'])
+            except KeyError:
+                pass
+            return func(**kwargs)
+        return f
 
-    def set_params(self, **kwargs):
-        return self
-
-
-import pickle
-_LEARNER = pickle.dumps(skrub.X().skb.apply(None, y=skrub.y()).skb.set_name("estimator").skb.make_learner())
 
 def to_learner(estimator: BaseEstimator):
-    try:
-        check_is_fitted(estimator)
-    except NotFittedError:
-        is_fitted = False
-    else:
-        is_fitted = True
-    if is_fitted:
-        estimator = _FrozenEstimator(estimator)
-    learner = pickle.loads(_LEARNER)
-    learner.data_op._skrub_impl.estimator = estimator
-    if is_fitted:
-        learner.fit({"X": None, "y": None})
-    return learner
-
+    return _LearnerAdapter(estimator)
 
 def to_estimator(learner: skrub.SkrubLearner):
-    estimator = learner.find_fitted_estimator("estimator")
-    if isinstance(estimator, _FrozenEstimator):
-        estimator = estimator.estimator
-    return estimator
+    if isinstance(learner, _LearnerAdapter):
+        return learner.estimator
+    return learner.find_fitted_estimator("estimator")
