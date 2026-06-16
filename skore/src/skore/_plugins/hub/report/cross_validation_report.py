@@ -302,16 +302,23 @@ class CrossValidationReportPayload(ReportPayload[CrossValidationReport]):
                     train_target_distribution.append(train.get(label, 0))
                     test_target_distribution.append(test.get(label, 0))
             else:
-                y = np.asarray(self.report.y)
-                linspace = np.linspace(
-                    float(y.min()),
-                    float(y.max()),
-                    num=TARGET_DISTRIBUTION_REPR_SAMPLE_COUNT,
-                )
-                train_kernel = gaussian_kde(train_y)
-                train_target_distribution = [float(x) for x in train_kernel(linspace)]
-                test_kernel = gaussian_kde(test_y)
-                test_target_distribution = [float(x) for x in test_kernel(linspace)]
+                if self.report.ml_task == "multioutput-regression":
+                    # TODO
+                    train_target_distribution = [1.0]
+                    train_target_distribution = [1.0]
+                else:
+                    y = np.asarray(self.report.y)
+                    linspace = np.linspace(
+                        float(y.min()),
+                        float(y.max()),
+                        num=TARGET_DISTRIBUTION_REPR_SAMPLE_COUNT,
+                    )
+                    train_kernel = gaussian_kde(train_y)
+                    train_target_distribution = [
+                        float(x) for x in train_kernel(linspace)
+                    ]
+                    test_kernel = gaussian_kde(test_y)
+                    test_target_distribution = [float(x) for x in test_kernel(linspace)]
 
             train_target_distributions.append(train_target_distribution)
             train_target_distributions_sample_count.append(len(train_y))
@@ -348,6 +355,9 @@ class CrossValidationReportPayload(ReportPayload[CrossValidationReport]):
 
         target = cast(np.ndarray, self.report.y)
 
+        if self.report.ml_task == "multioutput-regression":
+            # TODO
+            return [0.0, 1.0]
         return [float(target.min()), float(target.max())]
 
     @computed_field  # type: ignore[prop-decorator]
